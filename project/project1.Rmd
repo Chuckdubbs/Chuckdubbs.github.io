@@ -1,0 +1,343 @@
+---
+title: "CAW_Rproject"
+author: "Charles Wolfe"
+date: "3/31/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, eval = TRUE, fig.align = "center", 
+    warning = F, message = F, tidy = TRUE, tidy.opts = list(width.cutoff = 60), 
+    R.options = list(max.print = 100))
+```
+
+## Setup and Packages used
+
+Below are the packages I used in my local RStudio environment. SpotifyR being the most unique towards this project.
+
+```{r cars}
+#Setup
+library(devtools)
+library(tidyverse)
+library(knitr)
+library(dplyr)
+library(corrplot)
+library(factoextra)
+library(ggrepel)
+library(FactoMineR)
+```
+## Part 0: Introduction (5pts)
+
+-My Original Plan was to use my OWN spotify data via using the SpotifyR package API, combining my 2020 and 2021 datas. However there is a queue time associated with pulling data from Spotify. So despite my requesting my data many moons ago, Spotify still hasn't sent me anything :C.
+
+My goal here it to take a spotify dataset containing over 32,000 individual songs, each with associated organizational variables and predictive score variables. With the dataset, I want to tidy, split, join, wrangle, and visualize the data towards a meaningful interpretation. I make sure to define the variables below. I also used a key to get SpotifyR up and running, but I dont think I will use it all that much.
+
+This spotify data very much interested me because, like many, I am an avid spotify listener, and always have wanted a peak behind the scenes. As one who is new to data-wrangling, I'm not sure what I expect to find. If I had to speculate I would expect there to be a correlation between the popularity of a song and the danceability? I also want to make a new variable using mutate to come up with a new metric for songs? Maybe something funny! Let's get started!
+
+## Part 1: Tidying things up (10pts)
+
+- Luckily this data is already tidy, so all I had to do was read the data from github.
+```{R}
+spotify <- readr::read_csv('https://raw.githubusercontent.com/nairrj/DataWrangling/main/spotify_songs.csv')
+glimpse(spotify)
+```
+- Variables:
+
+- ORGANIZATIONAL VARIABLES
+- track_id: Specific number for each track
+- track_name: Track name
+- track_artist: Track's artist
+- track_popularity: Percentile of track popularity
+- track_album_id: Specific number for each album
+- track_album_name: Album name
+- track_album_release_date: Release date in YYYY-MM-DD
+- playlist_name: Playlist name
+- Playlist_id: Specific number for each playlist
+- Playlist_genre: Main genre group of playlist (ex. edm)
+- Playlist_subgenre: Subgenre of playlist (ex. big room)
+
+- PREDICTIVE SCORE VARIABLES
+- danceability: score 1 to 0, intensity of rhythm
+- energy: Score 1 to 0, intensity of volume, lack of dynamics
+- key: value starting at 0, 0 corresponding to middle C
+- loudness: absolute value corresponding to amplitude
+- mode: major or minor, 0 or 1
+- speechiness: score 1 to 0, detects vowel sounds
+- vacousticness: score 1 to 0, predicts if track is acoustic
+- instrumentalness: score 1 to 0, how non-vocal is track
+- liveness: score 1 to 0, estimated live performance
+- valence: score 1 to 0, estimated happiness of track
+- tempo: estimated tempo of track. Sometimes is doubled for cut time?
+- duration_ms: duration of track in milliseconds(ms)
+
+
+## Part 2: Joining/ Merging (10pts)
+
+- Since I'm working with one dataset here. Nathaniel said it would be ok to split and rejoin from one dataset. 
+
+-Here I am splitting the "spotify" dataset by omitting different columns creating two new datasets sharing only track_id. 
+
+```{R}
+spotify_music_logs <- spotify %>% select(-c(instrumentalness, danceability,energy, key, loudness, mode, speechiness, acousticness, liveness, valence, tempo, duration_ms))
+
+spotify_music_feels <- spotify %>% select(-c(track_name, track_artist, track_popularity, track_album_id, track_album_name, track_album_release_date, playlist_name, playlist_id, playlist_genre, playlist_subgenre))
+
+glimpse(spotify_music_logs)
+glimpse(spotify_music_feels)
+```
+- I then use a full_join to re-merge the spotify_music_feels and spotify_music_logs datasets into a new dataset called FrankenSpotify.
+
+- I used a full_join because I wanted to join all variables in both datasets by the track_id variable.
+
+- Everything in the dataset was retained. However there were double the cases! So I removed the duplicates based on track_id. I chose track_id becase, unlinke track_name, it is a discrete value for each track. (Ex. there are some songs with the same name and release date, but different artists).
+
+- I removed the duplicates here  
+
+```{R}
+FrankenSpotify <- full_join(spotify_music_feels, spotify_music_logs, by = "track_id") 
+
+Spotify_dataset <- FrankenSpotify[!duplicated(FrankenSpotify$track_id),]
+
+glimpse(Spotify_dataset)
+```
+- So, down the line I found some issues. So I tested for NAs and removed them. This gives the final raw dataset Final_Spotify.
+
+```{R}
+any(is.na(FrankenSpotify))
+
+Final_Spotify <- Spotify_dataset %>% drop_na()
+
+glimpse(Final_Spotify)
+```
+
+## Part 3: Wrangling (40 pts)
+
+- I begin with the mutation. My friends and I wanted to make a variable that accounts for the "edginess" of the track. We begin with a few examples, Linkin park, Evanescance, classically edgy stuff, searching for variables that were high or low. Below are a few examples of querys aimed at exploring the dataset.
+
+- After some discussion, we decided that all the edgy tracks were high in energy, low in danceability, and low in valence.
+
+- Hencefore the term "Edgeitude" is:
+(((1-valence) + (energy) + (1-danceability))/4 + 0.2))
+
+```{R}
+Streamlined_Data <- spotify %>% select(-c(track_album_id, track_album_name, playlist_name, playlist_id, key, loudness, speechiness, acousticness, instrumentalness,  liveness, duration_ms, mode))
+```
+```{R}
+Edge_spotifydata <- Streamlined_Data %>% mutate(Edgeitude = (((1-valence) + (energy) + (1-danceability))/4 + 0.2))
+```
+
+```{R}
+Edge_spotifydata %>% filter(track_artist == "Linkin Park") 
+
+Edge_spotifydata %>% filter(track_artist == "Evanescence") %>% group_by(energy, danceability) %>% arrange(Edgeitude)
+
+glimpse(Edge_spotifydata)
+```
+
+- Now onto calculating some summary statistics!
+
+- I begin by calculating the old-fashioned way:
+
+```{R}
+# danceability  
+n_distinct(Edge_spotifydata$danceability)
+mean(Edge_spotifydata$danceability)
+sd(Edge_spotifydata$danceability)
+max(Edge_spotifydata$danceability)
+min(Edge_spotifydata$danceability)
+cor(Edge_spotifydata$Edgeitude, Edge_spotifydata$danceability)
+```
+
+- I then use a summarize_if function to calculate n, mean, sd, median, max, and min for all numeric columns. 
+
+- I chose these stats because I wanted to observe the edgitude max, min, and mean mostly. Sd seems useful in the long run for graphical applications?
+
+- I then pivot the table longer so its easier to read.
+
+- Some of the datasets had the axis switched, so I used a transpose prior to viewing.
+
+- Here are the ungrouped stats.
+
+```{R}
+Edge_spotifydata %>% summarize_if(is.numeric, list(unique = n_distinct, mean = mean, sd = sd, median = median, max = max, min = min), na.rm = T)  %>% pivot_longer(c(contains("_")), names_to = "variable_stat", values_to = "values")
+```
+- I then compute the summary statistics for all genres, edm, and rock respectively. This helped me explore the dataset and practice some grouping and filtering skills.
+
+- Here I group by two categorical variables. Playlist_genre and playlist_subgenre.
+
+```{R}
+Summary_stats_genre <- Edge_spotifydata %>% group_by(playlist_genre, playlist_subgenre) %>% summarize_if(is.numeric, list(mean = mean, unique =n_distinct, max = max, sd = sd, median = median, min = min), na.rm = T)
+
+Summary_stats_genre_transpose <- as.data.frame(t(Summary_stats_genre))
+
+head(Summary_stats_genre_transpose)
+```
+- Here I filter for edm and group by subgenre.
+```{R}
+Summary_stats_edm <- Edge_spotifydata %>% filter(playlist_genre == "edm") %>% group_by(playlist_subgenre) %>% summarize_if(is.numeric, list(mean = mean, unique =n_distinct, max = max, sd = sd, median = median, min = min), na.rm = T)
+
+Summary_stats_edm_transpose <- as.data.frame(t(Summary_stats_edm))
+
+head(Summary_stats_edm_transpose)
+```
+- Here I filter for rock and group by subgenre.
+
+- I include the whole dataset for the rock genre stats, just to show how I looked at the values. Hope this helps!
+```{R}
+Summary_stats_rock <- Edge_spotifydata %>% filter(playlist_genre == "rock") %>% group_by(playlist_subgenre) %>% summarize_if(is.numeric, list(mean = mean, unique =n_distinct, max = max, sd = sd, median = median, min = min), na.rm = T)
+
+Summary_stats_rock_transpose <- as.data.frame(t(Summary_stats_rock))
+
+Summary_stats_rock_transpose
+```
+```{R}
+Edge_spotifydata %>% group_by(track_name, Edgeitude) %>% arrange(desc(Edgeitude))
+```
+
+Summary: 
+
+I began by mutating the "edgeitude" variable in terms of existing spotify variables. I then computed the summary statistics n, mean, sd, median, max, and min for all numeric columns using the summarize function. I explored different subgenres specifically with some basic filtering and grouping. There is a lot to look at (for me anyways). Admittedly, I was most interested in the edgeitude variable. After looking, it seemed that the genre with the highest mean edgeitude was edm!
+
+Least edgy song: Mosaic(Skit) by Psalm Trees
+
+Most edgy song: Feed the machine by Red
+
+TECHNICALLY the edgiest of all songs was	Forest Rain by Forest rain recordings... Which makes some sense based on the edgeitude metric? I excluded all white noise things. I guess nothing is more edgy than listening to nature?
+
+
+## Part 4: Visualizing (30 pts)
+
+- Here is my correlation heatmap. (like we did in class)
+
+```{R} 
+Edge_spotifydata %>% select_if(is.numeric) %>% cor %>% as.data.frame %>%  rownames_to_column %>% pivot_longer(-1) %>%  ggplot(aes(rowname,name,fill=value))+geom_tile()+  geom_text(aes(label=round(value,2)))+  xlab("")+ylab("")+coord_fixed()+  scale_fill_gradient2(low="red",mid="white",high="blue")
+```
+
+- I also found this neat package for correlation heatmaps and matricies. Not relevant for the grade, just thought it was a neat, alternate way of diplaying the results.
+
+```{R}
+corr_Edge_spotifydata <- select(Edge_spotifydata, track_popularity, danceability, energy, valence, tempo, Edgeitude)
+corrplot(cor(corr_Edge_spotifydata), type="upper")
+```
+
+- What these correlation heatmaps are telling us: 
+- Strong inverse correlation between Edgeitude and danceability, Edgeitude and valence. Moderate positive correlation between Edgeitude and energy. The correlations observed with the edgeitude variable make sense, as Edgeitude is defined in terms of the danceability, valence, and energy variables.
+- To reiterate: “Edgeitude” is: (((1-valence) + (energy) + (1-danceability))/4 + 0.2))
+- Mild-moderate positive correlation between valence and danceability. Happy songs tend to be groove-worthy!
+- Mild positive correlation between valence and energy. I suppose happy songs tend to have some drive to their beats.
+- Track popularity and danceability are positively correlated, which is neat. Negatively correlated to energy and Edgeitude. Which means popular tracks tend to be up-beat.
+
+-Box plot Across Genre
+```{R}
+ggplot(data=Edge_spotifydata, mapping=aes(x=Edgeitude, y=playlist_genre)) +
+  geom_boxplot(aes(color = playlist_genre), outlier.shape = NA) +
+  stat_summary(fun.y = mean, geom = "point", size=2, aes(shape = "blue", color = "blue")) + 
+  theme_bw()
+```
+-Box plot Across subgenre
+```{R}
+ggplot(data=Edge_spotifydata, mapping=aes(x=Edgeitude, y=playlist_subgenre)) +
+  geom_boxplot(aes(color = playlist_genre), outlier.shape = NA) +
+  stat_summary(fun.y = mean, geom = "point", size=1.5, aes(shape = "blue", color = "blue")) + 
+  theme_bw()
+```
+
+- These two boxplots look at the trends in edgeitude values broken down by genre and subgenre, respectively. I tampered a lot with the themes and colors to make this digestable (hopefully). I used the stat_summary function in both of these boxplots (I think thats what you meant in the rubric?). 
+- The first boxplot shows edm as the edgiest genre, followed by rock. The least edgy genres seem to be r&b and latin music.
+- The second boxplot shows hard rock and big room as the two most edgy genres. Hard rock appears to have the most edgy outliers, which must be the "feed the machine" song found in the data wrangling section.
+
+- column plot mapping mean Edgeitude value across genre and sub genre.
+```{R}
+ggplot(Summary_stats_genre, aes(x = Edgeitude_mean, y = Edgeitude_unique, fill = playlist_genre)) + theme(axis.text.x = element_text(face="bold", color="black", size=8, angle=0)) +
+  geom_col(position = "dodge") + geom_text_repel(aes(label = playlist_subgenre), size = 2) +
+  facet_grid(playlist_genre ~ ., scales = "free")
+```
+
+
+
+- Whereas the boxplots looked at the Edgeitude value across genres, I wanted to display the mean values per subgenre via faceting (I think faceting is cool). 
+
+- I installed ggrepel to keep the subgenre names nice and clean-ish.
+
+- Edm subgenres boasted the highest mean edgeitude values, big room at the pinnacle. It makes sense that pop edm is similar to pop!
+
+- Latin subgenres had a tighter distribution of average edgeitude values. 
+
+- Pop subgenres had VERY similar edgeitude mean values, meaning these subgenres were all around as edgy as one another.
+
+- R & B had the least mean edgeitude subgenres. New jack swing being the least mean edgy subgenre.
+
+- Rap was analogous to R & B, trap being its most edgy
+
+- rock, like edm, had a very wide distribution of mean edgy values. Hard rock is the second most edgy subgenre. I think it makes sense that classic rock was the least edgy of the rock genres.
+
+- Overall, these findings seem to support the finding from the boxplots! 
+
+## Part 5: Dimensionality Reduction (30 pts)
+
+-As one who is new to PCA, I was a bit confused where to go with this section. I emailed Woodward who said
+
+- "If you are doing PCA, all you need is to run it, choose the number of PCs to retain, interpret them (in terms of the original variables and in terms of which observations are high/low on them), and create some kind of visualization of them (no need to do anything else)!"
+
+
+```{r}
+EdgeSpotifydata_nums <- Edge_spotifydata %>% select_if(is.numeric) %>%  scale
+
+rownames(EdgeSpotifydata_nums) <- Edge_spotifydata$track_name
+
+Edge_pca <- princomp(EdgeSpotifydata_nums)
+
+names(Edge_pca)
+```
+
+```{r}
+EdgePrin <- princomp(EdgeSpotifydata_nums)
+summary(EdgePrin, loadings = T)
+```
+```{r}
+fviz_eig(EdgePrin)
+```
+```{r}
+get_eigenvalue(EdgePrin)
+```
+
+- According to the Scree Plot and this table showing the PC and cumulative variance percent. I should only need three PC. I base this on Kaiser's rule (PC4 is below 1), that the scree plot elbow is between PC3 and PC4, and that PC1, PC2, and PC3 account for 75% of the variance in the dataset cumulatively. 
+
+```{r}
+Edge_pca$scores[,1:4] %>% as.data.frame  %>% top_n(3, Comp.1)
+Edge_pca$scores[,1:4] %>% as.data.frame  %>% top_n(-3, Comp.1)
+Edge_pca$scores[,1:4] %>% as.data.frame  %>% top_n(3, Comp.2)
+Edge_pca$scores[,1:4] %>% as.data.frame  %>% top_n(-3, Comp.2)
+Edge_pca$scores[,1:4] %>% as.data.frame  %>% top_n(3, Comp.3)
+Edge_pca$scores[,1:4] %>% as.data.frame  %>% top_n(-3, Comp.3)
+```
+
+- These tables show the 3 highest and lowest track_names for PC1, PC2, and PC3 respectively.
+
+```{r}
+Edge_spotifydata %>% filter(track_name == "Mosaic - Skit")
+
+Edge_spotifydata %>% filter(track_name == "Feed The Machine")
+```
+- PC1 tends to approximate the edgeitude tradeoff, hence why feed the machine is very low. Check out the end of pt3! Those finding support this claim! 
+
+```{r}
+Edge_spotifydata %>% filter(track_name == "listen before i go")
+
+Edge_spotifydata %>% filter(track_name == "2 Of Amerikaz Most Wanted")
+```
+
+- PC2 tends to work with a tradeoff in a whole mess of things. I think they have something to do with the popularity of the song and the valence. I think the graphical interpretations may help a lot. I think there are some versions of the songs, such as re-releases, that explains why the 2pac songs are extremely unpopular. Hence why they are rated so low. Billie Eilish "Listen before I go" is an extremely popular song with low energy. Hence why it is rated so high on PC2.
+
+```{r}
+Edge_spotifydata %>% filter(track_name == "Back In Black")
+
+Edge_spotifydata %>% filter(track_artist == "DREAMS COME TRUE")
+```
+- PC3 tends to work with a tradeoff in track_popularity and energy. A lot of the songs were 2pac,  Hi, How're You Doin'? has a popularity of 0, which is strange. I think there are some versions of the songs, such as re-releases, that are extremely unpopular. Hence why they are rated so low. AC/DC "Back In Black" is an extremely popular song with low energy. Hence why it is rated so high on PC3.
+ 
+```{r}
+fviz_pca_var(EdgePrin, col.var = "contrib", gradient.cols = c(), repel = FALSE )
+```
+
+- Overall I think this graphic supports what I suspected from the tabular data. PC1 is very edgeitude influenced, which makes sense given the top and lowest tracks from the results. PC2 and PC3 seem to have a lot of similarities. I think I was right in assuming that popularity influcned both components. But I didn't even check the tempo, which appears to be a major contributor to PC2 score. The graph certainly helps account for the nuanced observed differences in the results! I'll definelty keep factoextra around!

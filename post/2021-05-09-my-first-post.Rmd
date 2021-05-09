@@ -1,0 +1,26 @@
+---
+title: My first post
+author: ''
+date: '2021-05-09'
+slug: my-first-post
+categories: []
+tags: []
+description: ''
+---
+
+So a moth walks into a pediatrist's office..
+
+[Link to project 1](/project/project1/)
+
+[Link to google](https://www.google.com)
+
+```{r}
+print("Hello World!")
+```
+
+```{python}
+print("Hello World!")
+```
+
+![](/img/Spaceshot.jpg)
+

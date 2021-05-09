@@ -1,0 +1,514 @@
+---
+title: "Project 2"
+author: "Charles Wolfe"
+date: "5/5/2021"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+Charles Wolfe: caw5274
+
+Below are the packages I used in my local RStudio environment. SpotifyR being the most unique towards this project.
+
+```{r}
+#Setup
+library(devtools)
+
+library(tidyverse)
+library(knitr)
+library(dplyr)
+library(corrplot)
+library(factoextra)
+library(ggrepel)
+library(FactoMineR)
+library(rstatix)
+library(ggpubr)
+library(ggplot2)
+library(lmtest)
+library(sandwich)
+library(plotROC)
+library(glmnet)
+library(rstatix)
+
+```
+
+## Part 0: Introductions....Dataset, reader. Reader, dataset! (5pts)
+
+- I begin by incorperating the tidy spotify dataset from the previous project, I had a lot of fun with it!
+
+```{r}
+spotifybig <- readr::read_csv('https://raw.githubusercontent.com/nairrj/DataWrangling/main/spotify_songs.csv')
+
+#set.seed function
+set.seed(10)
+#taking sample of 10 rows from the iris dataset. 
+x<- sample(1:nrow(spotifybig), 1000)
+spotify <- spotifybig[x, ]
+dim(spotify)
+glimpse(spotify)
+```
+
+Variables:
+
+- ORGANIZATIONAL VARIABLES
+- track_id: Specific number for each track
+- track_name: Track name
+- track_artist: Track's artist
+- track_popularity: Percentile of track popularity
+- track_album_id: Specific number for each album
+- track_album_name: Album name
+- track_album_release_date: Release date in YYYY-MM-DD
+- playlist_name: Playlist name
+- Playlist_id: Specific number for each playlist
+- Playlist_genre: Main genre group of playlist (ex. edm)
+- Playlist_subgenre: Subgenre of playlist (ex. big room)
+
+- PREDICTIVE SCORE VARIABLES
+- danceability: score 1 to 0, intensity of rhythm
+- energy: Score 1 to 0, intensity of volume, lack of dynamics
+- key: value starting at 0, 0 corresponding to middle C
+- loudness: absolute value corresponding to amplitude
+- mode: major or minor, 0 or 1
+- speechiness: score 1 to 0, detects vowel sounds
+- acousticness: score 1 to 0, predicts if track is acoustic
+- instrumentalness: score 1 to 0, how non-vocal is track
+- liveness: score 1 to 0, estimated live performance
+- valence: score 1 to 0, estimated happiness of track
+- tempo: estimated tempo of track. Sometimes is doubled for cut time?
+- duration_ms: duration of track in milliseconds(ms)
+
+- Popularity:score of 1 to 100. 100 being most popular.
+
+Now I want to retain only the numeric 'predictive score variables'
+```{r}
+spotify_music_numeric <- spotify %>% select(-c(track_artist, track_album_id, track_album_name, track_album_release_date, playlist_name, playlist_id, playlist_genre, playlist_subgenre)) %>% mutate(popular = (track_popularity > 50))
+dim(spotify_music_numeric)
+glimpse(spotify_music_numeric)
+```
+
+- In this spotify_music_numeric dataset, there are 1000 observations of 12 variables.
+
+
+## Part 1: Analysis of variance (15pts)
+
+Perform a MANOVA testing whether any of your numeric variables (or a subset of them, if including them all is unreasonable or doesn’t make sense) show a mean difference across levels of one of your categorical variables (3).
+
+```{r}
+spotify_music_numeric_means <- spotify_music_numeric %>% group_by(popular) %>% summarize(mean(danceability), mean(energy), mean(key), mean(loudness), mean(mode), mean(speechiness), mean(acousticness), mean(instrumentalness), mean(liveness), mean(valence), mean(tempo), mean(duration_ms))
+head(spotify_music_numeric_means)
+```
+
+```{r}
+group <- spotify_music_numeric$popular
+DVs <- spotify_music_numeric %>% select(danceability, energy, key, loudness, mode, speechiness, acousticness, instrumentalness, liveness, valence, tempo, duration_ms)
+
+sapply(split(DVs, group), mshapiro_test)
+```
+It appears that multivariate normality is met!
+
+```{r}
+MANLY <- manova(cbind(danceability, energy, key, loudness, mode, speechiness, acousticness, instrumentalness, liveness, valence, tempo, duration_ms) ~ track_popularity, data = spotify_music_numeric)
+summary(MANLY)
+```
+Looking at the MANOVA, track_popularity does differ by danceability, energy, key, loudness, mode, speechiness, acousticness, instrumentalness, liveness, valence, tempo, duration_ms. Now which ones??
+
+
+If they do, perform univariate ANOVAs to find response(s) showing a mean difference across groups (3), and perform post-hoc t tests to find which groups differ (3). 
+
+```{r}
+summary.aov(MANLY)
+```
+From the ANOVA, it appears that Acousticness, Energy, Instrumentalness, and Duration_ms vary closest with track_popularity.
+
+```{r}
+spotify_music_numeric%>%group_by(popular)%>%summarize(mean(acousticness),mean(energy), mean(instrumentalness), mean(duration_ms))
+
+
+pairwise.t.test(spotify_music_numeric$acousticness, spotify_music_numeric$popular, p.adj="none")
+pairwise.t.test(spotify_music_numeric$energy, spotify_music_numeric$popular, p.adj="none")
+pairwise.t.test(spotify_music_numeric$instrumentalness, spotify_music_numeric$popular, p.adj="none")
+pairwise.t.test(spotify_music_numeric$duration_ms, spotify_music_numeric$popular, p.adj="none")
+```
+
+Of the post hoc t-tests, energy and intstrumentalness populations are significantly different than the track_popularity population. Duration_ms and acousticness are not significantly different.
+
+```{r}
+spotify_music_numeric.long <- spotify_music_numeric %>% select(-c(track_id, track_name)) %>% 
+  pivot_longer(-track_popularity, names_to = "variables", values_to = "value")
+spotify_music_numeric.long %>% sample_n(10)
+
+#stat.test <- spotify_music_numeric.long %>%
+ # group_by(variables) %>%
+  # t_test(value ~ track_popularity, p.adjust.method = "none")
+
+# stat.test %>% select(-.y., -statistic, -df)
+```
+
+
+-Discuss the number of tests you have performed, calculate the probability of at least one type I error (if unadjusted), and  adjust the significance level accordingly (bonferroni correction) before discussing significant differences (3). 
+
+We did 1 MANOVA + 12 ANOVA + 4 t-pairwise t tests. With a bonferroni corrected score of  a=0.05/(1+12+4), a=0.0029. Now only the instrumentalness score is significant. Energy, with a p values of 0.02 can no longer be considered significant.
+
+
+
+
+-Briefly discuss some of the MANOVA assumptions and whether or not they are likely to have been met here (no need for         anything too in-depth) (2).
+
+MANOVA assumes many things!
+According to the shapiro test, the data does fit the criterea for multivariate normality. However i cannot say whether this is a perfectly sampled dataset from the whole spotify reservoir. 
+
+The variance in this dataset does show some heteroskadisticity, so I am hesitant to say whether these datasets are homogenous in variance.
+
+There are no extreme outliers! This is because the variables are all set between 0 and 100.
+
+I dont think the DVs are overly correlated, later in the project there are plenty of plots showing how non perfectly correlated this datasets DVs are.
+
+
+## Part 2: Randomization tests (10pts)
+
+-Perform some kind of randomization test on your data (that makes sense). The statistic can be anything you want (mean        difference, correlation, F-statistic/ANOVA, chi-squared), etc. State null and alternative hypotheses, perform the test, and  interpret the results (7). 
+
+
+```{r}
+head(spotify_music_numeric) 
+spotify_music_numeric %>% group_by(popular) %>%
+  summarize(means=mean(loudness)) %>% summarize(`mean_diff`=diff(means))
+```
+
+
+
+Create a plot visualizing the null distribution and the test statistic (3).
+
+```{r}
+rand_dist<-vector() #create vector to hold diffs under null hypothesis
+
+for(i in 1:500){
+new<-data.frame(time=sample(spotify_music_numeric$loudness),condition=spotify_music_numeric$popular) #scramble columns
+rand_dist[i]<-mean(new[new$condition=="TRUE",]$time)-   
+              mean(new[new$condition=="FALSE",]$time)} #compute mean difference (base R)
+
+mean(rand_dist< -0.491 | rand_dist> 0.491 ) 
+{hist(rand_dist,main="",ylab=""); abline(v = c(-0.491, 0.491),col="red")}
+```
+H0: choosing the mean difference value was due to random chance, pulling the mean difference would be the same regardless of assignment. 
+
+H: Not random chance
+
+From the randomization test p = 0.014, we can reject the null hypothesis! We can tell the associations discerned from the observed data are not due to random chance!
+
+
+## Part 3: Linear regression model (40pts)
+
+Build a linear regression model predicting one of your response variables from at least 2 other variables, including their interaction. Mean-center any numeric variables involved in the interaction.
+
+-Interpret the coefficient estimates (do not discuss significance) (10)
+
+Here is the linear model including all the variables So I tried to use an lm containing the interaction between all the variables. My computer HATED it. So i am going to find the two influential variables, and pick them.
+
+```{r}
+Linearmodelv1.0 <- lm(track_popularity ~ danceability + energy + loudness + speechiness + acousticness + instrumentalness + liveness + valence + tempo + duration_ms + key, data = spotify_music_numeric)
+summary(Linearmodelv1.0)
+```
+From the significant coefficiant estimates, it appears energy, speechiness, instrumentalness, and duration_ms are all negatively correlated with popularity. Danceability and loudness are positively correlated with track popularity. 
+
+Instrumentalness has the most drastic slope of the significant variable coefficients (Strong negative), this makes sense, as most popular song do contain lyrics. 
+
+The trend seems, according to this linear regression model, that popular songs tend to be loud, vocal, short in length, and danceable. 
+
+Oddly, energy has a moderate negative correlation with popularity. 
+
+Note: speechiness is a term often associated with talking speech, speechiness does not equate top vocals in a song. Often speechiness is used to classify podcast material on spotify.
+
+
+Selecting Acousticness, Energy, and Instrumentalness. I center the variables and re-run the linear regression.
+```{r}
+spotify_music_numeric$energy_c <- spotify_music_numeric$energy - mean(spotify_music_numeric$energy)
+spotify_music_numeric$acousticness_c <- spotify_music_numeric$acousticness - mean(spotify_music_numeric$acousticness)
+spotify_music_numeric$instrumentalness_c <- spotify_music_numeric$instrumentalness - mean(spotify_music_numeric$instrumentalness)
+
+Linearmodelv2.0 <- lm(track_popularity ~ energy_c*acousticness_c*instrumentalness_c, data=spotify_music_numeric)
+summary(Linearmodelv2.0)
+```
+From the significant coefficiant estimates, energy and istrumentalness are negatively correlated with track_popularity. None of the interactions are signficantly correlated with the DV. Regardless, all of the binary interactions are negatively correlated with the DV the except energy_c and instrumentalness_c interaction. The interaction between all of the IVs are very negatively correlated with the DV.
+
+-Plot the regression using ggplot() using geom_smooth(method=“lm”). If your interaction is numeric by numeric, refer to code in the slides to make the plot or check out the interactions package, which makes this easier. If you have 3 or more predictors, just chose two of them to plot for convenience. (10)
+
+```{r}
+spotify_music_numeric %>% ggplot(aes(track_popularity, energy)) + geom_point() + geom_smooth(method = 'lm',se=F)
+```
+
+
+-What proportion of the variation in the outcome does your model explain? (4)
+```{r}
+coefficients <- summary(Linearmodelv2.0)$coefficients[2:8,1]
+coefficients <- data.frame(round(coefficients, digits=2))
+colnames(coefficients) <- "Coefficients" 
+Percentage = 100*round((abs(coefficients$Coefficients)/sum(abs(coefficients$Coefficients))),2)
+coefficients = cbind(coefficients, Percentage)
+coefficients <- coefficients[order(-coefficients$Percentage),,drop=FALSE]
+coefficients$Percentage <- paste(as.character(coefficients$Percentage),"%")
+
+coefficients
+
+summary(Linearmodelv2.0)$r.sq
+```
+This model, based on the interaction between energy_c:speechiness_c:danceability_c, is able to explain approximately 2.7% of the variance in the dataset. Which is not much at all :C
+
+
+-Check assumptions of linearity, normality, and homoskedasticity either graphically or using a hypothesis test (5)
+
+```{r}
+rf_1 <- ggplot(Linearmodelv2.0, aes(.fitted, .resid)) +
+  geom_point() +
+  geom_smooth(se = FALSE)
+  ggtitle("Residuals vs Fitted")
+
+rf_1
+
+summary(Linearmodelv2.0)$r.sq
+```
+Hmmm. Hard to tell whether the data is fanning. My suspicion is there is heteroskadisticity present, still I want to check formally.
+
+```{r}
+ks.test(Linearmodelv2.0$residuals, "pnorm", mean=0, sd(Linearmodelv2.0$residuals))
+```
+```{r}
+bptest(Linearmodelv2.0)
+```
+The formal tests confirm that there is There is heteroskadisticity within the model. The KS test yeilds a low P-value meaning that the lack of fit is significant, the residual is not normal. 
+
+
+-Regardless, recompute regression results with robust standard errors via coeftest(..., vcov=vcovHC(...)). Discuss
+ significance of results, including any changes from before/after robust SEs if applicable. (10)
+```{r}
+coeftest(Linearmodelv2.0, vcov = vcovHC(Linearmodelv2.0))[,1:2]
+```
+
+Using the robust standard errorsm the coefficiants, the coefficiants remain identical, but the errors do decrease slightly. Robust standard errors are especially useful when the data does not meet the assumption of homoskadisicity!
+
+
+
+## Part 4: Bootstrapping (5pts)
+
+-Rerun same regression model (with the interaction), but this time compute bootstrapped standard errors (either by            resampling observations or residuals). Discuss any changes you observe in SEs and p-values using these SEs compared to       the original SEs and the robust SEs)
+
+```{r}
+samp_distn<-replicate(5000, {
+  boot_dat<-spotify_music_numeric[sample(nrow(spotify_music_numeric),replace=TRUE),]
+  fit<-lm(track_popularity ~ energy_c*acousticness_c*instrumentalness_c, data=boot_dat)
+  coef(fit)
+})
+```
+```{r}
+samp_distn%>%t%>%as.data.frame%>%summarize_all(sd)
+```
+
+Bootstrapped standard errors are good when an assumption is violated. In this case, the bootstrapped SEs are analogous to the robust SEs and the standard SEs as seen before. When there are differences, the bootstrapped SEs are slightly greater than the observed SEs.
+
+
+
+## Part 5: Logistic Regression predicting with at least two variables. (30pts)
+
+Fit a logistic regression model predicting a binary variable (if you don’t have one, make/get one) from at least two explanatory variables (interaction not necessary).
+
+-Interpret coefficient estimates in context (10)
+
+First, to generate a binary response variable. I created this one based off the "popular" caterogical variable, which reads "TRUE" if the track_popularity > 50.
+```{r}
+data <- spotify_music_numeric %>% mutate(y=ifelse(popular=="TRUE",1,0))
+head(data)
+```
+
+
+```{r}
+fit <- glm(y ~ energy+acousticness+instrumentalness, data=data)
+coeftest(fit)
+```
+
+Of the significantly different coefficiants.
+
+For every one unit increase in instrumentalness, the odds for track_popularity change by a factor of e^-0.28 or 0.75
+
+
+-Report a confusion matrix for your logistic regression (5)
+ Compute and discuss the Accuracy, Sensitivity (TPR), Specificity (TNR), Precision (PPV), and AUC of your model (5)
+ 
+```{r}
+probs<-predict(fit,type="response") #get predicted probs from model
+
+## Confusion matrix
+table(predict=as.numeric(probs>.5),truth=data$y)%>%addmargins
+
+(583+13)/1000 #accuracy
+583/972 #tpr
+13/28 #tnr
+583 /598 #ppv
+```
+
+According to slide 22 of the logistic1 powerpoint.
+
+Accuracy: 60%, which is pretty bad, considering there is almost a 50/50 chance in choosing the right value.
+
+Sensitivity and specificity are 60% and 46% respectively. This means that the proportion of popular songs and nonpopular songs were not correctly classified by the model
+
+Precision: oddly was 97%! which means that the model was really good at classifying non-popular songs!
+
+
+-Using ggplot, make a density plot of the log-odds (logit) colored/grouped by your binary outcome variable (5)
+```{r}
+data$logit<-predict(fit,type="link")
+data%>%ggplot()+geom_density(aes(logit,color=popular,fill=popular), alpha=.4)+
+  theme(legend.position=c(.85,.85))+geom_vline(xintercept=0)+xlab("logit (log-odds)")+
+  geom_rug(aes(logit,color=popular))+
+  geom_text(x=-5,y=.07,label="TN = 431")+
+  geom_text(x=-1.75,y=.008,label="FN = 19")+
+  geom_text(x=1,y=.006,label="FP = 13")+
+  geom_text(x=5,y=.04,label="TP = 220")
+```
+
+-Generate an ROC curve (plot) and calculate AUC (either manually or with a package); interpret (5)
+
+```{r}
+#geom_roc needs actual outcome (0,1) and predicted probability (or predictor if just one) 
+ROCplot<-ggplot(data)+geom_roc(aes(d=y,m=probs), n.cuts=0) 
+
+ROCplot
+calc_auc(ROCplot)
+```
+
+According the the slides, this area under the curve is considered bad (0.58). The AUC is only slightly better than a classifier that randomly predicts 1s and 0s. This may be due to the smaller sample size? The results from the logit plot confirm my suspicion that the model is missclassifying "popular" and "non-popular" songs.
+
+## Part 6: Logistic regression prediciting with all the variables! (25pts)
+
+Perform a logistic regression predicting the same binary response variable from ALL of the rest of your variables (the more, the better!)
+
+-Fit model, compute in-sample classification diagnostics (Accuracy, Sensitivity, Specificity, Precision, AUC), and            interpret (5)
+  
+```{r}
+fit2 <- glm(y~danceability + energy + loudness + speechiness + acousticness + instrumentalness + liveness + valence + tempo + duration_ms + key, data=data)
+#summary(fit2)
+
+probs<-predict(fit2,type="response") #get predicted probs from model
+
+## Confusion matrix
+table(predict=as.numeric(probs>.5),truth=data$y)%>%addmargins
+
+(524+105)/1000 #accuracy
+524/821 #tpr
+105/179 #tnr
+524/598  #ppv
+```
+According to slide 22 of the logistic1 powerpoint.
+
+Accuracy: 63%, which is an improvement! It's still not great, considering there is almost a 50/50 chance in choosing the right value.
+
+Sensitivity and specificity are 63% and 58% respectively. This means that the proportion of popular songs and nonpopular songs are better classified by this model versus the previous glm. Despite the improvement, this model is still pretty bad at classifying popular and non popular songs.
+
+Precision: oddly was 88%, worse than 97% before. This still means that the model was adept at classifying non-popular songs!
+
+
+-Perform 10-fold (or repeated random sub-sampling) CV with the same model and report average out-of-sample                    classification diagnostics (Accuracy, Sensitivity, Specificity, Precision, and AUC); interpret AUC and compare with   the    in-sample metrics (10)
+```{r}
+class_diag<-function(probs,truth){
+  
+  if(is.numeric(truth)==FALSE & is.logical(truth)==FALSE) truth<-as.numeric(truth)-1
+  
+  tab<-table(factor(probs>.5,levels=c("FALSE","TRUE")),truth)
+  prediction<-ifelse(probs>.5,1,0)
+  acc=mean(truth==prediction)
+  sens=mean(prediction[truth==1]==1)
+  spec=mean(prediction[truth==0]==0)
+  ppv=mean(truth[prediction==1]==1)
+  f1=2*(sens*ppv)/(sens+ppv)
+  
+  #CALCULATE EXACT AUC
+  ord<-order(probs, decreasing=TRUE)
+  probs <- probs[ord]; truth <- truth[ord]
+  
+  TPR=cumsum(truth)/max(1,sum(truth)) 
+  FPR=cumsum(!truth)/max(1,sum(!truth))
+  
+  dup<-c(probs[-1]>=probs[-length(probs)], FALSE)
+  TPR<-c(0,TPR[!dup],1); FPR<-c(0,FPR[!dup],1)
+  
+  n <- length(TPR)
+  auc<- sum( ((TPR[-1]+TPR[-n])/2) * (FPR[-1]-FPR[-n]) )
+
+  data.frame(acc,sens,spec,ppv,auc)
+}
+```
+
+```{r}
+data12 <- data %>% sample_frac #put rows of dataset in random order
+folds <- ntile(1:nrow(data),n=10) #create fold labels
+
+diags<-NULL
+for(i in 1:10){
+  train <- data12[folds!=i,] #create training set (all but fold i)
+  test <- data12[folds==i,] #create test set (just fold i)
+  truth <- test$y #save truth labels from fold i
+  
+  fit2 <- glm(y~danceability + energy + loudness + speechiness + acousticness + instrumentalness + liveness + valence + tempo + duration_ms + key, data=train, family="binomial")
+  probs <- predict(fit2, newdata=test, type="response")
+  
+  diags<-rbind(diags, class_diag(probs,truth))
+}
+
+summarize_all(diags,mean)
+```
+
+  
+-Perform LASSO on the same model/variables. Choose lambda to give the simplest model whose accuracy is near that of    the    best (i.e., lambda.1se). Discuss which variables are retained. (5)
+```{r}
+data123 <- data %>% select(-track_id, -track_name, -popular, -logit, -energy_c, -acousticness_c, -instrumentalness_c)
+a<-as.matrix(data123$y) 
+b<-data123 %>% select(-y, -track_popularity) %>% mutate_all(scale) %>% as.matrix 
+
+cv<-cv.glmnet(b,a,family="binomial")
+lasso<-glmnet(b,a,family="binomial",lambda=cv$lambda.1se)
+coef(lasso)
+```
+
+Looks like we should use danceability, energy, loudness, instrumentalness in the next model. These variables have been on our radar throughout the entirety of the project. Earlier we rationalize popular songs to be danceable and loud! Here lasso is telling us something similar!
+
+
+-Perform 10-fold CV using only the variables lasso selected: compare model’s out-of-sample AUC to that of your   logistic     regressions above (5)
+```{r}
+data69 <- data %>% sample_frac #put rows of dataset in random order
+folds <- ntile(1:nrow(data),n=10) #create fold labels
+
+diags<-NULL
+for(i in 1:10){
+  train <- data69[folds!=i,] #create training set (all but fold i)
+  test <- data69[folds==i,] #create test set (just fold i)
+  truth <- test$y #save truth labels from fold i
+  
+  fit2 <- glm(y~danceability + energy + loudness + instrumentalness, data=train, family="binomial")
+  probs <- predict(fit2, newdata=test, type="response")
+  
+  diags<-rbind(diags, class_diag(probs,truth))
+}
+
+summarize_all(diags,mean)
+```
+
+Compared to the logistic regression model containing all of the variables, this model actually performed a little better by all of the performance metrics! This is really interesting becuase this model considers less than half the variables versus the other model! The AUC is almost identical, slightly larger. 0.622 vs 0.628 (seeds may vary).
+
+
+Some final conclusions!
+1. This was a tricky dataset to work with (for me) but I needed the practice, as our lab uses Lasso all the time to develop classifier models. These classifier models take input mass spectrometric data towards classifying tissue subtypes, carcinoma, etc!!
+
+2. Throughout the process of working with the dataset, I was having a lot of performance issues especially with any steps involving a loop. So downsizing the dataset made sense for this. But in the future, when working with high dimensionality mass spectrometric datasets, containing thousands of dimensions, I'll have so work on a more powerful setup.
+
+3. When initally working with the larger dataset, much of the results were the same between the two! Interestingly, there were less significant variables within the smaller dataset versus the larger dataset, is this due to random chance? 
+
+4. While the model developed here is not very good in general (those performance metrics are poo) It can adeptly determine songs as non-popular! Which is good for something?
+
+Had a lot of trouble/fun with this!
+
+-charlie
+
