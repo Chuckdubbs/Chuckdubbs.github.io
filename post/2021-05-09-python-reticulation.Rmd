@@ -1,0 +1,31 @@
+---
+title: Python Reticulation!
+author: Charlie
+date: '2021-05-09'
+slug: python-reticulation
+categories: []
+tags: []
+description: ''
+---
+
+
+![](/img/sillypic.jpg)
+
+So RMD files are the coolest thing ever!
+
+```{r}
+library(reticulate)
+
+Name <- "R: We can finish each other's?!................."
+```
+
+```{python}
+Name = "Python: I saw frozen too, R.."
+print(r.Name, Name)
+```
+```{r}
+cat(c(Name, py$Name))
+```
+
+
+

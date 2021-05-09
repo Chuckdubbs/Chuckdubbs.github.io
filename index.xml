@@ -20,6 +20,29 @@ print(&amp;quot;Hello World!&amp;quot;) ## [1] &amp;quot;Hello World!&amp;quot; 
     </item>
     
     <item>
+      <title>Python Reticulation!</title>
+      <link>/post/2021/05/09/python-reticulation/</link>
+      <pubDate>Sun, 09 May 2021 00:00:00 +0000</pubDate>
+      
+      <guid>/post/2021/05/09/python-reticulation/</guid>
+      <description> So RMD files are the coolest thing ever!
+library(reticulate) Name &amp;lt;- &amp;quot;R: We can finish each other&amp;#39;s?!.................&amp;quot; Name = &amp;quot;Python: I saw frozen too, R..&amp;quot; print(r.Name, Name) ## R: We can finish each other&amp;#39;s?!................. Python: I saw frozen too, R.. cat(c(Name, py$Name)) ## R: We can finish each other&amp;#39;s?!................. Python: I saw frozen too, R.. </description>
+    </item>
+    
+    <item>
+      <title>This song is off the chizzain</title>
+      <link>/post/2021/05/09/this-song-is-off-the-chizzain/</link>
+      <pubDate>Sun, 09 May 2021 00:00:00 +0000</pubDate>
+      
+      <guid>/post/2021/05/09/this-song-is-off-the-chizzain/</guid>
+      <description>One of the best EDM artists of all time, au5, has released some great songs recently!
+Au5 - Flashback
+This is a super cool, synthwavy song! Its kinda progressive too, if youre in to that sorta thing.
+Give it a listen!
+-charlie</description>
+    </item>
+    
+    <item>
       <title>Hello R Markdown</title>
       <link>/post/2015/07/23/hello-r-markdown/</link>
       <pubDate>Thu, 23 Jul 2015 21:13:14 -0500</pubDate>
